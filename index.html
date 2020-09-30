@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Websockets</title>
+  </head>
+  <body>
+    <script>
+      let socket = new WebSocket("ws://localhost:8000/ws");
+      console.log("Tentando conexão com o servidor");
+
+      socket.onopen = function () {
+        console.log("Conectado com sucesso");
+        socket.send("Enviado pelo frontend");
+      };
+
+      socket.onclose = function (evt) {
+        console.log("Conexão com o socket fechada ", event);
+      };
+
+      socket.onmessage = function (evt) {
+        var messages = evt.data.split("\n");
+        for (var i = 0; i < messages.length; i++) {
+          console.log("FROM SERVER: " + messages[i]);
+        }
+      };
+
+      socket.onerror = function (err) {
+        console.log("Erro no socket: ", err);
+      };
+    </script>
+  </body>
+</html>
