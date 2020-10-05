@@ -39,7 +39,7 @@ func setupRoutes(app *fiber.App) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Dados inválidos", "data": nil})
 		}
 
-		// Como enviar a resposta via websockets?
+		// How to send this response via websocket?
 		return c.JSON(fiber.Map{"status": "success", "message": "Dados recebidos com sucesso", "data": sample})
 	})
 }
