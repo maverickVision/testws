@@ -1,54 +1,72 @@
 package main
 
 import (
+	"flag"
 	"log"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/websocket/v2"
+	"github.com/maverickvision/testws/internal/ws"
+
+	"github.com/nats-io/nats.go"
 )
 
-type sampleRequest struct {
-	Nome  string `json:"nome"`
-	Idade int    `json:"idade"`
-}
+var addr = flag.String("addr", ":3000", "api service address")
+var isNatsPublisher = flag.Bool("natsPublisher", true, "is nats publisher")
 
-func setupRoutes(app *fiber.App) {
-	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
-		for {
-			mt, msg, err := c.ReadMessage()
-			if err != nil {
-				log.Println("read:", err)
-				break
-			}
+const subject = "com.testws.updates"
 
-			log.Printf("received: %s", msg)
-			err = c.WriteMessage(mt, msg)
+func run() error {
+	flag.Parse()
 
-			if err != nil {
-				log.Println("write:", err)
-				break
-			}
-		}
-	}))
+	var serverName string
+	if *addr == ":3000" {
+		serverName = "server 1"
+	} else {
+		serverName = "server 2"
+	}
+	hub := ws.NewHub(serverName)
+	go hub.Run()
 
-	app.Post("/", func(c *fiber.Ctx) error {
-		sample := new(sampleRequest)
+	nc, err := nats.Connect(nats.DefaultURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ec, err := nats.NewEncodedConn(nc, nats.JSON_ENCODER)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		if err := c.BodyParser(sample); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Dados inválidos", "data": nil})
-		}
+	defer ec.Close()
+	defer nc.Close()
 
-		// How to send this response via websocket?
-		return c.JSON(fiber.Map{"status": "success", "message": "Dados recebidos com sucesso", "data": sample})
-	})
-}
-
-func main() {
 	app := fiber.New()
 	app.Use(cors.New())
 
-	setupRoutes(app)
+	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
+		ws.ServeWs(hub, c, nc, subject)
+	}))
 
-	log.Fatal(app.Listen(":8000"))
+	app.Post("/ping", func(c *fiber.Ctx) error {
+		// publish to nats
+		if *isNatsPublisher {
+			message := map[string]string{"sendTime": time.Now().Format(time.ANSIC)}
+			if err := ec.Publish(subject, message); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		return c.JSON(fiber.Map{"message": "pong"})
+	})
+
+	return app.Listen(*addr)
+}
+
+func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
 }
